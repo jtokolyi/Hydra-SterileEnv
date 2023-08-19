@@ -1,0 +1,72 @@
+sample-id	group	type	temp	treatment	FinalPopSize
+#q2:types	categorical	categorical	categorical	categorical	numeric
+M52-viz-A1-12fok	LW-12	water	12 degrees	LW	7
+M52-viz-A2-12fok	LW-12	water	12 degrees	LW	4
+M52-viz-A3-12fok	LW-12	water	12 degrees	LW	2
+M52-viz-A4-12fok	LW-12	water	12 degrees	LW	4
+M52-viz-A5-12fok	LW-12	water	12 degrees	LW	1
+M52-viz-C1-12fok	HM-12	water	12 degrees	HM	3
+M52-viz-C2-12fok	HM-12	water	12 degrees	HM	7
+M52-viz-C3-12fok	HM-12	water	12 degrees	HM	7
+M52-viz-C4-12fok	HM-12	water	12 degrees	HM	1
+M52-viz-C5-12fok	HM-12	water	12 degrees	HM	10
+M52-viz-D1-12fok	ALW-12	water	12 degrees	ALW	2
+M52-viz-D2-12fok	ALW-12	water	12 degrees	ALW	2
+M52-viz-D3-12fok	ALW-12	water	12 degrees	ALW	4
+M52-viz-D4-12fok	ALW-12	water	12 degrees	ALW	3
+M52-viz-D5-12fok	ALW-12	water	12 degrees	ALW	0
+M52-viz-A1-8fok	LW-8	water	8 degrees	LW	17
+M52-viz-A2-8fok	LW-8	water	8 degrees	LW	18
+M52-viz-A3-8fok	LW-8	water	8 degrees	LW	16
+M52-viz-A4-8fok	LW-8	water	8 degrees	LW	23
+M52-viz-A5-8fok	LW-8	water	8 degrees	LW	15
+M52-viz-C1-8fok	HM-8	water	8 degrees	HM	16
+M52-viz-C2-8fok	HM-8	water	8 degrees	HM	10
+M52-viz-C3-8fok	HM-8	water	8 degrees	HM	12
+M52-viz-C4-8fok	HM-8	water	8 degrees	HM	10
+M52-viz-D1-8fok	ALW-8	water	8 degrees	ALW	11
+M52-viz-D2-8fok	ALW-8	water	8 degrees	ALW	8
+M52-viz-D3-8fok	ALW-8	water	8 degrees	ALW	6
+M52-viz-D4-8fok	ALW-8	water	8 degrees	ALW	5
+M52-viz-D5-8fok	ALW-8	water	8 degrees	ALW	10
+M52-A1-12fok	Hydra-LW-12	polyp	12 degrees	LW	7
+M52-A2-12fok	Hydra-LW-12	polyp	12 degrees	LW	4
+M52-A3-12fok	Hydra-LW-12	polyp	12 degrees	LW	2
+M52-A4-12fok	Hydra-LW-12	polyp	12 degrees	LW	4
+M52-A5-12fok	Hydra-LW-12	polyp	12 degrees	LW	1
+M52-C1-12fok	Hydra-HM-12	polyp	12 degrees	HM	3
+M52-C2-12fok	Hydra-HM-12	polyp	12 degrees	HM	7
+M52-C5-12fok	Hydra-HM-12	polyp	12 degrees	HM	10
+M52-D1-12fok	Hydra-ALW-12	polyp	12 degrees	ALW	2
+M52-D2-12fok	Hydra-ALW-12	polyp	12 degrees	ALW	2
+M52-D3-12fok	Hydra-ALW-12	polyp	12 degrees	ALW	4
+M52-D4-12fok	Hydra-ALW-12	polyp	12 degrees	ALW	3
+M52-D5-12fok	Hydra-ALW-12	polyp	12 degrees	ALW	0
+M52-A1-8fok	Hydra-LW-8	polyp	8 degrees	LW	17
+M52-A2-8fok	Hydra-LW-8	polyp	8 degrees	LW	18
+M52-A3-8fok	Hydra-LW-8	polyp	8 degrees	LW	16
+M52-A4-8fok	Hydra-LW-8	polyp	8 degrees	LW	23
+M52-A5-8fok	Hydra-LW-8	polyp	8 degrees	LW	15
+M52-C1-8fok	Hydra-HM-8	polyp	8 degrees	HM	16
+M52-C2-8fok	Hydra-HM-8	polyp	8 degrees	HM	10
+M52-C3-8fok	Hydra-HM-8	polyp	8 degrees	HM	12
+M52-C4-8fok	Hydra-HM-8	polyp	8 degrees	HM	10
+M52-C5-8fok	Hydra-HM-8	polyp	8 degrees	HM	11
+M52-D1-8fok	Hydra-ALW-8	polyp	8 degrees	ALW	11
+M52-D2-8fok	Hydra-ALW-8	polyp	8 degrees	ALW	8
+M52-D3-8fok	Hydra-ALW-8	polyp	8 degrees	ALW	6
+M52-D5-8fok	Hydra-ALW-8	polyp	8 degrees	ALW	10
+M52-1-2	Hydra-Initial	polyp	Field sample	Field	
+M52-1-4	Hydra-Initial	polyp	Field sample	Field	
+M52-2-1	Hydra-Initial	polyp	Field sample	Field	
+M52-2-2	Hydra-Initial	polyp	Field sample	Field	
+M52-H2O-1	LW-Initial	water	Field sample	Field	
+M52-H2O-2	LW-Initial	water	Field sample	Field	
+M52-BE-1	M52-sick	polyp	NA	Other	
+M52-BE-2	M52-sick	polyp	NA	Other	
+M26-REF-1-8	HealthyRef	polyp	NA	Other	
+T31-REF-1-8	HealthyRef	polyp	NA	Other	
+C2-7-REF-1-8	HealthyRef	polyp	NA	Other	
+M26-REF-1-18	HealthyRef	polyp	NA	Other	
+CtrlNFW1	Ctrl	NA	NA	Other	
+CtrlNFW2	Ctrl	NA	NA	Other	

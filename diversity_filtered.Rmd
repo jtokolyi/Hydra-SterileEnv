@@ -1,0 +1,587 @@
+---
+title: "Sterile water effects on hydra"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+# Load libraries
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+library(dplyr); library(readr); library(DESeq2); library(ggplot2); library(qiime2R)
+library(phyloseq); library(microbiome); library(reshape2); library(ANCOMBC); library(ggh4x)
+library(metagMisc); library(EnvStats); library(fantaxtic); library(modelsummary); 
+library(ggpubr); library(pairwiseAdonis); library(flextable); library(grid); library(LinDA);
+library(stringr); library(tidyr)
+```
+
+# Import data
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+full_data <- qza_to_phyloseq(
+        features = "~/hidra/2023/MicrobiomeWaterFitness/results/experiment_filtered.qza",
+        metadata = "~/hidra/2023/MicrobiomeWaterFitness/data/16S/metadata.tsv",
+        tree = "~/hidra/2023/MicrobiomeWaterFitness/results/tree/unrooted-tree.qza",
+        taxonomy = "~/hidra/2023/MicrobiomeWaterFitness/results/taxonomy/classification.qza")
+
+phyloseq_prevalence_plot(full_data)
+tax_table(full_data)[,3][grep("uncultured", tax_table(full_data)[,3])] <- NA
+tax_table(full_data)[,4][grep("uncultured", tax_table(full_data)[,4])] <- NA
+tax_table(full_data)[,5][grep("uncultured", tax_table(full_data)[,5])] <- NA
+tax_table(full_data)[,6][grep("uncultured", tax_table(full_data)[,6])] <- NA
+tax_table(full_data)[,7][grep("uncultured", tax_table(full_data)[,7])] <- NA
+full_data <- name_na_taxa(full_data, include_rank = F, na_label="Unknown <tax>")
+
+sample_data(full_data)$group <- factor(sample_data(full_data)$group, 
+        levels=c("LW-Initial","Hydra-Initial","LW-8","LW-12","Hydra-LW-8","Hydra-LW-12",
+                 "ALW-8","ALW-12","Hydra-ALW-8","Hydra-ALW-12","HM-8","HM-12","Hydra-HM-8","Hydra-HM-12"))
+sample_data(full_data)$treatment <- factor(sample_data(full_data)$treatment, levels=c("LW","ALW","HM"))
+sample_data(full_data)$type <- factor(sample_data(full_data)$type, levels=c("water","polyp")) 
+sample_data(full_data)$temp <- factor(sample_data(full_data)$temp, levels=c("Field sample","8 degrees","12 degrees")) 
+sample_data(full_data)$reads_sample <- readcount(full_data)
+sample_data(full_data)$shannon <- microbiome::alpha(full_data, index = "shannon")[,1]
+sample_data(full_data)$chao1 <- microbiome::alpha(full_data, index = "chao1")[,1]
+sample_data(full_data)$evenness <- microbiome::alpha(full_data, index = "pielou")[,1]
+
+polyps8 <- subset_samples(full_data, type=="polyp"&temp=="8 degrees")
+polyps12 <- subset_samples(full_data, type=="polyp"&temp=="12 degrees")
+water8 <- subset_samples(full_data, type=="water"&temp=="8 degrees")
+water12 <- subset_samples(full_data, type=="water"&temp=="12 degrees")
+
+polyps <- subset_samples(full_data, type=="polyp"&temp!="Field sample")
+water <- subset_samples(full_data, type=="water"&temp!="Field sample")
+
+df <- as.data.frame(sample_data(full_data)@.Data)
+names(df)<-sample_data(full_data)@names
+
+df$group <- factor(df$group, 
+        levels=c("LW-Initial","Hydra-Initial","LW-8","LW-12","Hydra-LW-8","Hydra-LW-12",
+                 "ALW-8","ALW-12","Hydra-ALW-8","Hydra-ALW-12","HM-8","HM-12","Hydra-HM-8","Hydra-HM-12"))
+
+
+```
+
+# Alpha diversity
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+group.names <- function(variable, value){
+  facet1_names <- c(expression(paste("8~degree~C")), expression(paste("12~degree~C")))
+  facet2_names <- c("LW", "ALW", "HM")
+  if (variable=='temp') {
+    return(facet1_names[value])
+  } else if (variable=='treatment') {
+    return(facet2_names[value])
+  } else {
+    return(as.character(value))
+  }
+}
+
+top.polyps <- fantaxtic::top_taxa(polyps, tax_level = "Genus", n_taxa = 15,grouping = "group", include_na_taxa = T)
+plot_nested_bar(top.polyps$ps_obj, top_level = "Order", nested_level = "Genus")+
+  facet_wrap(~temp+treatment,scale="free_x",nrow=2)+
+  theme(axis.text.x=element_blank(),legend.key.height=unit(5,"mm"))+
+  guides(fill=guide_legend(ncol=1))
+ggsave(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/toptaxa_polyps.tiff",width=180,height=180,units="mm",dpi="print")
+
+top.water <- fantaxtic::top_taxa(water, tax_level = "Genus", n_taxa = 15,grouping = "group", include_na_taxa = T)
+plot_nested_bar(top.water$ps_obj, top_level = "Order", nested_level = "Genus")+
+  facet_wrap(~temp+treatment,scale="free_x",nrow=2)+
+  theme(axis.text.x=element_blank(),legend.key.height=unit(5,"mm"))+
+  guides(fill=guide_legend(ncol=1))
+ggsave(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/toptaxa_water.tiff",width=180,height=180,units="mm",dpi="print")
+
+ggplot(df, aes(y=chao1,x=treatment,fill=treatment))+geom_boxplot()+facet_wrap(~type+temp,scale="free_x")+
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))+ 
+  ylab("Chao1 diversity")+stat_n_text()+theme_bw()+scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))
+
+ggplot(df, aes(y=shannon,x=treatment,fill=treatment))+geom_boxplot()+facet_wrap(~type+temp,scale="free_x")+
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))+
+  ylab("Shannon diversity")+stat_n_text()+theme_bw()+scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))
+
+ggplot(df, aes(y=evenness,x=treatment,fill=treatment))+geom_boxplot()+facet_wrap(~type+temp,scale="free_x")+
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))+
+  ylab("Pielou evenness")+stat_n_text()+theme_bw()+scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))
+
+datasummary(group~chao1*(mean+sd)+shannon*(mean+sd)+evenness*(mean+sd), droplevels(subset(df, type=="polyp",drop=T)),
+            output="~/hidra/2023/MicrobiomeWaterFitness/MS/table1_polyps.docx")
+datasummary(group~chao1*(mean+sd)+shannon*(mean+sd)+evenness*(mean+sd), droplevels(subset(df, type=="water",drop=T)),
+            output="~/hidra/2023/MicrobiomeWaterFitness/MS/table1_water.docx")
+
+```
+
+# Beta diversity
+## Bray-Curtis
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+nmds.obj <- ordinate(full_data, method="NMDS", distance="bray")
+beta.braycurtis <- plot_ordination(full_data, nmds.obj, type="samples",color="treatment",shape="temp")+facet_wrap(~type)+
+  geom_point(size=1) + 
+  geom_polygon(aes(fill=treatment),alpha=0.5)+theme_bw()+
+  scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
+  scale_color_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
+  ggtitle("Bray-Curtis")+theme(legend.title = element_blank())
+
+nmds.obj <- ordinate(full_data, method="NMDS", distance="jaccard",binary=T)
+beta.jaccard <- plot_ordination(full_data, nmds.obj, type="samples",color="treatment",shape="temp")+facet_wrap(~type)+
+  geom_point(size=1) + 
+  geom_polygon(aes(fill=treatment),alpha=0.5)+theme_bw()+
+  scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
+  scale_color_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
+  ggtitle("Jaccard presence-absence")+theme(legend.title = element_blank())
+
+weighted.unifrac <- UniFrac(full_data, weighted=T)
+nmds.obj <- ordinate(full_data, method="NMDS", distance=weighted.unifrac)
+beta.wUniFrac <- plot_ordination(full_data, nmds.obj, type="samples",color="treatment",shape="temp")+facet_wrap(~type)+
+  geom_point(size=1) + 
+  geom_polygon(aes(fill=treatment),alpha=0.5)+theme_bw()+
+  scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
+  scale_color_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
+  ggtitle("Weighted UniFrac")+theme(legend.title = element_blank())
+
+unweighted.unifrac <- UniFrac(full_data, weighted=F)
+nmds.obj <- ordinate(full_data, method="NMDS", distance=unweighted.unifrac)
+beta.uwUniFrac <- plot_ordination(full_data, nmds.obj, type="samples",color="treatment",shape="temp")+facet_wrap(~type)+
+  geom_point(size=1) + 
+  geom_polygon(aes(fill=treatment),alpha=0.5)+theme_bw()+
+  scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
+  scale_color_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
+  ggtitle("Unweighted UniFrac")+theme(legend.title = element_blank())
+
+ggarrange(beta.braycurtis, beta.jaccard, beta.wUniFrac, beta.uwUniFrac, nrow=2,ncol=2,common.legend=T,labels="AUTO")
+ggsave(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/beta.tiff",width=180,height=180,
+       units="mm",dpi="print",bg="white")
+
+################################################################################
+##### PERMANOVAs ## Of note: no rarefaction is done here #######################
+
+dist.bray.polyps8 <- phyloseq::distance(polyps8, "bray")
+adonis2(dist.bray.polyps8~sample_data(polyps8)$group)
+pairwise.adonis(dist.bray.polyps8, sample_data(polyps8)$group,p.adjust.m = "BH")
+
+dist.bray.polyps12 <- phyloseq::distance(polyps12, "bray")
+adonis2(dist.bray.polyps12~sample_data(polyps12)$group)
+pairwise.adonis(dist.bray.polyps12, sample_data(polyps12)$group,p.adjust.m = "BH")
+
+dist.bray.water8 <- phyloseq::distance(water8, "bray")
+adonis2(dist.bray.water8~sample_data(water8)$group)
+pairwise.adonis(dist.bray.water8, sample_data(water8)$group,p.adjust.m = "BH")
+
+dist.bray.water12 <- phyloseq::distance(water12, "bray")
+adonis2(dist.bray.water12~sample_data(water12)$group)
+pairwise.adonis(dist.bray.water12, sample_data(water12)$group,p.adjust.m = "BH")
+
+bray.adonis <- as.data.frame(rbind(pairwise.adonis(dist.bray.polyps8, sample_data(polyps8)$group,p.adjust.m = "BH"),
+                     pairwise.adonis(dist.bray.polyps12, sample_data(polyps12)$group,p.adjust.m = "BH"),
+                      pairwise.adonis(dist.bray.water8, sample_data(water8)$group,p.adjust.m = "BH"),
+                      pairwise.adonis(dist.bray.water12, sample_data(water12)$group,p.adjust.m = "BH")))
+bray.adonis <- bray.adonis[,c("pairs","R2","p.adjusted")]
+
+################################################################################
+dist.jaccard.polyps8 <- phyloseq::distance(polyps8, "jaccard",binary=T)
+adonis2(dist.jaccard.polyps8~sample_data(polyps8)$group)
+pairwise.adonis(dist.jaccard.polyps8, sample_data(polyps8)$group,p.adjust.m = "BH")
+
+dist.jaccard.polyps12 <- phyloseq::distance(polyps12, "jaccard",binary=T)
+adonis2(dist.jaccard.polyps12~sample_data(polyps12)$group)
+pairwise.adonis(dist.jaccard.polyps12, sample_data(polyps12)$group,p.adjust.m = "BH")
+
+dist.jaccard.water8 <- phyloseq::distance(water8, "jaccard",binary=T)
+adonis2(dist.jaccard.water8~sample_data(water8)$group)
+pairwise.adonis(dist.jaccard.water8, sample_data(water8)$group,p.adjust.m = "BH")
+
+dist.jaccard.water12 <- phyloseq::distance(water12, "jaccard",binary=T)
+adonis2(dist.jaccard.water12~sample_data(water12)$group)
+pairwise.adonis(dist.jaccard.water12, sample_data(water12)$group,p.adjust.m = "BH")
+
+jaccard.adonis <- as.data.frame(rbind(pairwise.adonis(dist.jaccard.polyps8, sample_data(polyps8)$group,p.adjust.m = "BH"),
+                     pairwise.adonis(dist.jaccard.polyps12, sample_data(polyps12)$group,p.adjust.m = "BH"),
+                      pairwise.adonis(dist.jaccard.water8, sample_data(water8)$group,p.adjust.m = "BH"),
+                      pairwise.adonis(dist.jaccard.water12, sample_data(water12)$group,p.adjust.m = "BH")))
+jaccard.adonis <- jaccard.adonis[,c("R2","p.adjusted")]
+
+################################################################################
+dist.weightedUniFrac.polyps8 <- UniFrac(polyps8, weighted=T)
+adonis2(dist.weightedUniFrac.polyps8~sample_data(polyps8)$group)
+pairwise.adonis(dist.weightedUniFrac.polyps8, sample_data(polyps8)$group,p.adjust.m = "BH")
+
+dist.weightedUniFrac.polyps12 <- UniFrac(polyps12, weighted=T)
+adonis2(dist.weightedUniFrac.polyps12~sample_data(polyps12)$group)
+pairwise.adonis(dist.weightedUniFrac.polyps12, sample_data(polyps12)$group,p.adjust.m = "BH")
+
+dist.weightedUniFrac.water8 <- UniFrac(water8, weighted=T)
+adonis2(dist.weightedUniFrac.water8~sample_data(water8)$group)
+pairwise.adonis(dist.weightedUniFrac.water8, sample_data(water8)$group,p.adjust.m = "BH")
+
+dist.weightedUniFrac.water12 <- UniFrac(water12, weighted=T)
+adonis2(dist.weightedUniFrac.water12~sample_data(water12)$group)
+pairwise.adonis(dist.weightedUniFrac.water12, sample_data(water12)$group,p.adjust.m = "BH")
+
+weightedUniFrac.adonis <- as.data.frame(rbind(pairwise.adonis(dist.weightedUniFrac.polyps8, sample_data(polyps8)$group,p.adjust.m = "BH"),
+                     pairwise.adonis(dist.weightedUniFrac.polyps12, sample_data(polyps12)$group,p.adjust.m = "BH"),
+                      pairwise.adonis(dist.weightedUniFrac.water8, sample_data(water8)$group,p.adjust.m = "BH"),
+                      pairwise.adonis(dist.weightedUniFrac.water12, sample_data(water12)$group,p.adjust.m = "BH")))
+weightedUniFrac.adonis <- weightedUniFrac.adonis[,c("R2","p.adjusted")]
+
+################################################################################
+dist.unweightedUniFrac.polyps8 <- UniFrac(polyps8, weighted=F)
+adonis2(dist.unweightedUniFrac.polyps8~sample_data(polyps8)$group)
+pairwise.adonis(dist.unweightedUniFrac.polyps8, sample_data(polyps8)$group,p.adjust.m = "BH")
+
+dist.unweightedUniFrac.polyps12 <- UniFrac(polyps12, weighted=F)
+adonis2(dist.unweightedUniFrac.polyps12~sample_data(polyps12)$group)
+pairwise.adonis(dist.unweightedUniFrac.polyps12, sample_data(polyps12)$group,p.adjust.m = "BH")
+
+dist.unweightedUniFrac.water8 <- UniFrac(water8, weighted=F)
+adonis2(dist.unweightedUniFrac.water8~sample_data(water8)$group)
+pairwise.adonis(dist.unweightedUniFrac.water8, sample_data(water8)$group,p.adjust.m = "BH")
+
+dist.unweightedUniFrac.water12 <- UniFrac(water12, weighted=F)
+adonis2(dist.unweightedUniFrac.water12~sample_data(water12)$group)
+pairwise.adonis(dist.unweightedUniFrac.water12, sample_data(water12)$group,p.adjust.m = "BH")
+
+unweightedUniFrac.adonis <- as.data.frame(rbind(pairwise.adonis(dist.unweightedUniFrac.polyps8, sample_data(polyps8)$group,p.adjust.m = "BH"),
+                     pairwise.adonis(dist.unweightedUniFrac.polyps12, sample_data(polyps12)$group,p.adjust.m = "BH"),
+                      pairwise.adonis(dist.unweightedUniFrac.water8, sample_data(water8)$group,p.adjust.m = "BH"),
+                      pairwise.adonis(dist.unweightedUniFrac.water12, sample_data(water12)$group,p.adjust.m = "BH")))
+unweightedUniFrac.adonis <- unweightedUniFrac.adonis[,c("R2","p.adjusted")]
+unweightedUniFrac.adonis$type <- rep(c("polyps8", "polyps12", "water8", "water12"),each=3)
+
+adonis.out <- as.data.frame(cbind(bray.adonis, jaccard.adonis, weightedUniFrac.adonis, unweightedUniFrac.adonis))
+names(adonis.out) <- c("pairs","bray_R2", "bray_padj","jaccard_R2","jaccard_padj",
+                                           "wUnifrac_R2","wUnifrac_padj","uwUnifrac_R2","uwUnifrac_padj","type")
+
+save_as_docx(
+  theme_vanilla(flextable(adonis.out)),
+  path="~/hidra/2023/MicrobiomeWaterFitness/MS/tables/table2_adonis.docx")
+
+```
+
+
+
+# Differently abundant features
+
+```{r ancom, warning=F,message=F}
+#load("ancom_genus_filtered.Rdata")
+polyps8.ancom.out <- ancombc(polyps8, formula = "treatment", tax_level="Genus",p_adj_method = "BH")
+water8.ancom.out <- ancombc(water8, formula = "treatment", tax_level="Genus",p_adj_method = "BH")
+polyps12.ancom.out <- ancombc(polyps12, formula = "treatment", tax_level="Genus",p_adj_method = "BH")
+water12.ancom.out <- ancombc(water12, formula = "treatment", tax_level="Genus",p_adj_method = "BH")
+```
+
+```{r LinDA, warning=F,message=F}
+
+genus_data <- tax_glom(polyps8, "Genus", NArm=F)
+feature_counts <- otu_table(genus_data)
+identical(row.names(tax_table(genus_data)), row.names(feature_counts))
+row.names(feature_counts) <- apply(as.data.frame(tax_table(genus_data))[,1:6], FUN=paste, 1, collapse=";")
+
+dat=sample_data(genus_data)%>%data.frame()
+polyps8.linda.out <- linda(feature_counts, dat, formula="~treatment",adaptive=F)
+names(polyps8.linda.out$output$treatmentALW) <- paste(names(polyps8.linda.out$output$treatmentALW), "ALW", sep="_")
+names(polyps8.linda.out$output$treatmentHM) <- paste(names(polyps8.linda.out$output$treatmentHM), "HM", sep="_")
+polyps8.meanAbund <- apply(polyps8.linda.out$otu.tab.use-0.5, 1, mean)
+polyps8.linda.out <- cbind(polyps8.linda.out$output$treatmentALW, polyps8.linda.out$output$treatmentHM)
+polyps8.linda.out$meanAbund <- polyps8.meanAbund
+polyps8.linda.out <- polyps8.linda.out%>%filter(padj_ALW<0.05)
+polyps8.linda.out$taxon <- sapply(strsplit(row.names(polyps8.linda.out),split=";"),"[",6)
+polyps8.ancom.taxa <- polyps8.ancom.out$res$p_val%>%filter(treatmentALW<0.05)%>%pull(taxon)
+polyps8.daa <- polyps8.linda.out[polyps8.linda.out$taxon%in%polyps8.ancom.taxa,]
+
+genus_data <- tax_glom(polyps12, "Genus", NArm=F)
+feature_counts <- otu_table(genus_data)
+identical(row.names(tax_table(genus_data)), row.names(feature_counts))
+row.names(feature_counts) <- apply(as.data.frame(tax_table(genus_data))[,1:6], FUN=paste, 1, collapse=";")
+
+dat=sample_data(genus_data)%>%data.frame()
+polyps12.linda.out <- linda(feature_counts, dat, formula="~treatment",adaptive=F)
+names(polyps12.linda.out$output$treatmentALW) <- paste(names(polyps12.linda.out$output$treatmentALW), "ALW", sep="_")
+names(polyps12.linda.out$output$treatmentHM) <- paste(names(polyps12.linda.out$output$treatmentHM), "HM", sep="_")
+polyps12.meanAbund <- apply(polyps12.linda.out$otu.tab.use-0.5, 1, mean)
+polyps12.linda.out <- cbind(polyps12.linda.out$output$treatmentALW, polyps12.linda.out$output$treatmentHM)
+polyps12.linda.out$meanAbund <- polyps12.meanAbund
+polyps12.linda.out <- polyps12.linda.out%>%filter(padj_ALW<0.05)
+polyps12.linda.out$taxon <- sapply(strsplit(row.names(polyps12.linda.out),split=";"),"[",6)
+polyps12.ancom.taxa <- polyps12.ancom.out$res$p_val%>%filter(treatmentALW<0.05)%>%pull(taxon)
+polyps12.daa <- polyps12.linda.out[polyps12.linda.out$taxon%in%polyps12.ancom.taxa,]
+
+genus_data <- tax_glom(water8, "Genus", NArm=F)
+feature_counts <- otu_table(genus_data)
+identical(row.names(tax_table(genus_data)), row.names(feature_counts))
+row.names(feature_counts) <- apply(as.data.frame(tax_table(genus_data))[,1:6], FUN=paste, 1, collapse=";")
+
+dat=sample_data(genus_data)%>%data.frame()
+water8.linda.out <- linda(feature_counts, dat, formula="~treatment",adaptive=F)
+names(water8.linda.out$output$treatmentALW) <- paste(names(water8.linda.out$output$treatmentALW), "ALW", sep="_")
+names(water8.linda.out$output$treatmentHM) <- paste(names(water8.linda.out$output$treatmentHM), "HM", sep="_")
+water8.meanAbund <- apply(water8.linda.out$otu.tab.use-0.5, 1, mean)
+water8.linda.out <- cbind(water8.linda.out$output$treatmentALW, water8.linda.out$output$treatmentHM)
+water8.linda.out$meanAbund <- water8.meanAbund
+water8.linda.out <- water8.linda.out%>%filter(padj_ALW<0.05)
+water8.linda.out$taxon <- sapply(strsplit(row.names(water8.linda.out),split=";"),"[",6)
+water8.ancom.taxa <- water8.ancom.out$res$p_val%>%filter(treatmentALW<0.05)%>%pull(taxon)
+water8.daa <- water8.linda.out[water8.linda.out$taxon%in%water8.ancom.taxa,]
+
+genus_data <- tax_glom(water12, "Genus", NArm=F)
+feature_counts <- otu_table(genus_data)
+identical(row.names(tax_table(genus_data)), row.names(feature_counts))
+row.names(feature_counts) <- apply(as.data.frame(tax_table(genus_data))[,1:6], FUN=paste, 1, collapse=";")
+
+dat=sample_data(genus_data)%>%data.frame()
+water12.linda.out <- linda(feature_counts, dat, formula="~treatment",adaptive=F)
+names(water12.linda.out$output$treatmentALW) <- paste(names(water12.linda.out$output$treatmentALW), "ALW", sep="_")
+names(water12.linda.out$output$treatmentHM) <- paste(names(water12.linda.out$output$treatmentHM), "HM", sep="_")
+water12.meanAbund <- apply(water12.linda.out$otu.tab.use, 1, mean)
+water12.meanAbund <- apply(water12.linda.out$otu.tab.use-0.5, 1, mean)
+water12.linda.out <- cbind(water12.linda.out$output$treatmentALW, water12.linda.out$output$treatmentHM)
+water12.linda.out$meanAbund <- water12.meanAbund
+water12.linda.out$meanAbund <- water12.meanAbund
+water12.linda.out <- water12.linda.out%>%filter(padj_ALW<0.05)
+water12.linda.out$taxon <- sapply(strsplit(row.names(water12.linda.out),split=";"),"[",6)
+water12.ancom.taxa <- water12.ancom.out$res$p_val%>%filter(treatmentALW<0.05)%>%pull(taxon)
+water12.daa <- water12.linda.out[water12.linda.out$taxon%in%water12.ancom.taxa,]
+```
+
+
+# Check specific taxa
+## Pseudomonas
+
+```{r}
+sel <- tax_glom(subset_taxa(water8, Genus=="Pseudomonas"), "Genus")
+sel.df <- data.frame(counts=otu_table(sel)@.Data[1,],sample_data(sel))
+ggplot(sel.df, aes(y=counts, x=treatment))+geom_boxplot()+facet_wrap(~type+temp)+geom_jitter()
+```
+
+```{r}
+polyps8.daa$type <- "polyps8"
+polyps12.daa$type <- "polyps12"
+water8.daa$type <- "water8"
+water12.daa$type <- "water12"
+
+daa.plot <- rbind(polyps8.daa, polyps12.daa, water8.daa, water12.daa)
+  
+daa.plot$type <- factor(daa.plot$type, levels=c("polyps8","polyps12","water8","water12")) 
+
+daa.flat<-data.frame(taxon=rep(daa.plot$taxon,2), lfc=c(daa.plot$log2FoldChange_ALW, daa.plot$log2FoldChange_HM),
+                     meanAbund = rep(daa.plot$meanAbund,2),
+                    Comparison=c(rep("ALW vs. LW",nrow(daa.plot)), rep("HM vs. LW",nrow(daa.plot))),
+                    type=c(daa.plot$type, daa.plot$type))
+
+ragg::agg_tiff(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/daa.tiff",width=180,height=180,units="mm",
+               res=300, scaling = 0.9)
+flabs <- c("Polyps 8 °C","Polyps 12 °C","Water 8 °C","Water 12 °C")
+names(flabs) <- c("polyps8","polyps12","water8","water12")
+ggplot(daa.flat, aes(y=reorder(taxon, lfc, mean),x=lfc, color=Comparison, size=meanAbund/25))+ 
+  geom_point(alpha=0.5) + facet_wrap(~type, scales="free_y",
+  labeller=labeller(type=flabs)) + xlim(-13.5,11) + ylab("")+force_panelsizes(rows=c(1,4))+
+  scale_color_manual(name="Comparison", values=c("ALW vs. LW" = "black", "HM vs. LW" = "#FF3300"))+
+  theme_bw()+theme(legend.position = "top", axis.text.y=element_text(size=7), 
+                   legend.justification = "right",plot.margin = unit(c(0,0,0,0),"mm"))+
+  scale_size_continuous(name="Mean abund.", breaks=c(4,100,200),labels=c(100,2500,5000))
+dev.off()
+```
+
+
+# Differential abundance - correlation with FinalPopSize
+
+```{r eval=F,echo=FALSE, message=FALSE, warning=FALSE, include=TRUE}
+genus_data <- tax_glom(polyps, "Genus", NArm=F)
+feature_counts <- otu_table(genus_data)
+identical(row.names(tax_table(genus_data)), row.names(feature_counts))
+row.names(feature_counts) <- as.vector(apply(as.data.frame(tax_table(genus_data))[,1:6], FUN=paste, 1, collapse=";"))
+
+res <- data.frame(tax = row.names(feature_counts), cor = NA, pvalue = NA)
+for(i in 1:nrow(feature_counts)){
+  temp <- cor.test(log(as.vector(feature_counts[i,])+1), log(sample_data(genus_data)$FinalPopSize+1), method="s")
+  res$cor[i] <- temp$estimate
+  res$pvalue[i] <- temp$p.value
+}
+res<-na.omit(res)
+res$padj <- p.adjust(res$pvalue, method="BH")
+res[res$padj<0.05,]
+
+fc.sel <- log(feature_counts[grep("Methylotenera|Polynucleobacter|Herbaspirillum", row.names(feature_counts)),]+1)
+
+fc.sel.df <- data.frame(genus = rep(row.names(fc.sel), each=ncol(fc.sel)),
+                        logCount = c(fc.sel[1,],fc.sel[2,],fc.sel[3,]),
+                        popsize = rep(sample_data(genus_data)$FinalPopSize, 3),
+                        temp = rep(sample_data(genus_data)$temp, 3),
+                        Treatment = rep(sample_data(genus_data)$treatment, 3))
+fc.sel.df$genus <- sapply(strsplit(fc.sel.df$genus,split=";"),"[",6)
+
+cor.polyps <- ggplot(fc.sel.df, aes(x=popsize, y=logCount,color=temp,shape=Treatment))+geom_point()+facet_wrap(~genus)+
+  scale_color_manual(name="Temperature",values=c("8 degrees"="blue", "12 degrees"="red"))+theme_bw()+
+  xlab("Hydra population size")+ylab("log ASV abundance + 1")+ggtitle("Polyps")
+
+genus_data <- tax_glom(water, "Genus", NArm=F)
+feature_counts <- otu_table(genus_data)
+identical(row.names(tax_table(genus_data)), row.names(feature_counts))
+row.names(feature_counts) <- as.vector(apply(as.data.frame(tax_table(genus_data))[,1:6], FUN=paste, 1, collapse=";"))
+
+res <- data.frame(tax = row.names(feature_counts), cor = NA, pvalue = NA)
+for(i in 1:nrow(feature_counts)){
+  temp <- cor.test(log(as.vector(feature_counts[i,])+1), log(sample_data(genus_data)$FinalPopSize+1), method="s")
+  res$cor[i] <- temp$estimate
+  res$pvalue[i] <- temp$p.value
+}
+res<-na.omit(res)
+res$padj <- p.adjust(res$pvalue, method="BH")
+res[res$padj<0.05,]
+
+fc.sel <- log(feature_counts[grep("Reyranella|Nitrosomonas|Fontimonas", row.names(feature_counts)),]+1)
+
+fc.sel.df <- data.frame(genus = rep(row.names(fc.sel), each=ncol(fc.sel)),
+                        logCount = c(fc.sel[1,],fc.sel[2,],fc.sel[3,]),
+                        popsize = rep(sample_data(genus_data)$FinalPopSize, 3),
+                        temp = rep(sample_data(genus_data)$temp, 3),
+                        Treatment = rep(sample_data(genus_data)$treatment, 3))
+fc.sel.df$genus <- sapply(strsplit(fc.sel.df$genus,split=";"),"[",6)
+
+cor.water <- ggplot(fc.sel.df, aes(x=popsize, y=logCount,color=temp,shape=Treatment))+geom_point()+facet_wrap(~genus)+
+  scale_color_manual(name="Temperature",values=c("8 degrees"="blue", "12 degrees"="red"))+theme_bw()+
+  xlab("Hydra population size")+ylab("log ASV abundance + 1")+ggtitle("Water")
+
+ggarrange(cor.polyps+theme(legend.title.align = 1), cor.water, ncol=1, common.legend = T, labels="AUTO")
+ggsave(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/popsize_correlation.tiff",width=180,height=180,units="mm",dpi="print",bg="white")
+```
+
+```{r Polynucleobacter}
+sel <- which(tax_table(polyps)%>%data.frame()%>%pull(Genus)=="Polynucleobacter")
+pnb <- row.names(tax_table(polyps)%>%data.frame())[sel]
+sequences <- readDNAStringSet("~/hidra/2023/MicrobiomeWaterFitness/results/sequences.fasta")
+pnb.seq <- sequences[which(names(sequences)%in%pnb)]
+pnb.seq@ranges@NAMES <- paste("Pnb_Holi_M52_2023",1:length(pnb.seq),sep="_")
+writeXStringSet(pnb.seq, file="~/hidra/2023/MicrobiomeWaterFitness/polynucleobacter/pnb_Holi_M52.fasta")
+
+pnb_abund <- otu_table(polyps)[sel,]%>%data.frame()
+row.names(pnb_abund) <- paste("Pnb_Holi_M52_2023",str_pad(1:nrow(pnb_abund),width=2,pad="0"),sep="_")
+pnb_tot <- apply(pnb_abund,1,sum)
+
+x<-ape::read.tree("~/hidra/2023/MicrobiomeWaterFitness/polynucleobacter/pnb_all/tree2.nwk")
+x$tip.label <- gsub("\'","",x$tip.label)
+x<-ape::root(x, "AF312022 Ralstonia basilensis strain DSM 11853")
+x.df <- data.frame(tip.label=gsub("\'","",x$tip.label))
+x.df$current.study <- ifelse(grepl("Holi_M52",x.df$tip.label), "yes","no")
+x.df$Abundance <- NA
+x.df$Abundance[x.df$current.study=="yes"] <- pnb_tot[x.df$tip.label[x.df$current.study=="yes"]]
+
+p <- ggtree(x)%<+%x.df
+p1 <- p+geom_tiplab(aes(color=current.study),size=3)+xlim(0,0.275)+
+  scale_color_manual(name="This study:",values=c("yes"="red","no"="black"))+
+  geom_tippoint(aes(size=Abundance,color=current.study))+theme(legend.position = c(0.1,0.8))
+
+pnb_wide <- cbind(sample_data(polyps),t(pnb_abund))
+pnb_long <- pivot_longer(pnb_wide, cols=starts_with("Pnb_Holi_M52"))
+
+p2 <- ggplot(pnb_long, aes(x=FinalPopSize, y=log(value+1),color=temp, shape=treatment))+geom_point()+
+  facet_wrap(~name,ncol=3)+
+  scale_color_manual(name="Temperature:",values=c("8 degrees"="blue", "12 degrees"="red"))+theme_bw()+
+  labs(shape="Treatment:")+
+  xlab("Hydra population size")+ylab("log (ASV abundance + 1)")+
+  theme(strip.text.x = element_text(size = 6))
+
+ragg::agg_tiff(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/pnb.tiff",width=180,height=180,units="mm",
+               res=300, scaling = 0.7)
+ggarrange(p1,p2,ncol=2,labels="AUTO",widths=c(2,1.9))
+dev.off()
+```
+
+
+#PICRUST2
+```{r}
+pc <- read.csv("~/hidra/2023/MicrobiomeWaterFitness/results/path_abun_unstrat.tsv",sep="\t")
+row.names(pc) <- pc[,1]
+pc <- pc[,(-1)]
+names(pc) <- gsub(".","-",names(pc),fixed = T)
+
+metadata <- read.csv("~/hidra/2023/MicrobiomeWaterFitness/data/16S/metadata.tsv",sep="\t")
+metadata <- metadata[!is.na(metadata$temp),][-1,]
+metadata <- metadata[metadata[,1]%in%names(pc),]
+row.names(metadata) <- metadata[,1]
+metadata$treatment<-factor(metadata$treatment, levels=c("LW","ALW","HM"))
+
+pathway.names <- read.csv("~/hidra/2023/MicrobiomeWaterFitness/scripts/metacyc_pathways_info.txt",sep="\t",header=F)
+row.names(pc) <- pathway.names[,2][match(row.names(pc), pathway.names[,1])]
+
+pw <- phyloseq(otu_table(pc, taxa_are_rows = T), sample_data(metadata))
+pw.polyps8 <- subset_samples(pw, type=="polyp"&temp=="8 degrees")
+pw.polyps8.ancom.out <- ancombc(pw.polyps8, formula="treatment", p_adj_method = "BH")
+pw.polyps8.ancom.taxa <- pw.polyps8.ancom.out$res$q_val$taxon[pw.polyps8.ancom.out$res$q_val$treatmentALW<0.05]
+pw.polyps8.linda.out <- linda(otu_table(pw.polyps8), sample_data(pw.polyps8)%>%data.frame(), formula="~treatment",adaptive=F)
+names(pw.polyps8.linda.out$output$treatmentALW) <- paste(names(pw.polyps8.linda.out$output$treatmentALW), "ALW", sep="_")
+names(pw.polyps8.linda.out$output$treatmentHM) <- paste(names(pw.polyps8.linda.out$output$treatmentHM), "HM", sep="_")
+pw.polyps8.daa.sel <- row.names(pw.polyps8.linda.out$output$treatmentALW)%in%pw.polyps8.ancom.taxa &
+  pw.polyps8.linda.out$output$treatmentALW$padj<0.05 
+pw.polyps8.daa <- cbind(pw.polyps8.linda.out$output$treatmentALW[pw.polyps8.daa.sel,],
+                        pw.polyps8.linda.out$output$treatmentHM[pw.polyps8.daa.sel,])
+
+pw.polyps12 <- subset_samples(pw, type=="polyp"&temp=="12 degrees")
+pw.polyps12.ancom.out <- ancombc(pw.polyps12, formula="treatment", p_adj_method = "BH")
+pw.polyps12.ancom.taxa <- pw.polyps12.ancom.out$res$q_val$taxon[pw.polyps12.ancom.out$res$q_val$treatmentALW<0.05]
+pw.polyps12.linda.out <- linda(otu_table(pw.polyps12), sample_data(pw.polyps12)%>%data.frame(), formula="~treatment",adaptive=F)
+names(pw.polyps12.linda.out$output$treatmentALW) <- paste(names(pw.polyps12.linda.out$output$treatmentALW), "ALW", sep="_")
+names(pw.polyps12.linda.out$output$treatmentHM) <- paste(names(pw.polyps12.linda.out$output$treatmentHM), "HM", sep="_")
+pw.polyps12.daa.sel <- row.names(pw.polyps12.linda.out$output$treatmentALW)%in%pw.polyps12.ancom.taxa &
+  pw.polyps12.linda.out$output$treatmentALW$padj<0.05 
+pw.polyps12.daa <- cbind(pw.polyps12.linda.out$output$treatmentALW[pw.polyps12.daa.sel,],
+                        pw.polyps12.linda.out$output$treatmentHM[pw.polyps12.daa.sel,])
+
+pw.water8 <- subset_samples(pw, type=="water"&temp=="8 degrees")
+pw.water8.ancom.out <- ancombc(pw.water8, formula="treatment", p_adj_method = "BH")
+pw.water8.ancom.taxa <- pw.water8.ancom.out$res$q_val$taxon[pw.water8.ancom.out$res$q_val$treatmentALW<0.05]
+pw.water8.linda.out <- linda(otu_table(pw.water8), sample_data(pw.water8)%>%data.frame(), formula="~treatment",adaptive=F)
+names(pw.water8.linda.out$output$treatmentALW) <- paste(names(pw.water8.linda.out$output$treatmentALW), "ALW", sep="_")
+names(pw.water8.linda.out$output$treatmentHM) <- paste(names(pw.water8.linda.out$output$treatmentHM), "HM", sep="_")
+pw.water8.daa.sel <- row.names(pw.water8.linda.out$output$treatmentALW)%in%pw.water8.ancom.taxa &
+  pw.water8.linda.out$output$treatmentALW$padj<0.05 
+pw.water8.daa <- cbind(pw.water8.linda.out$output$treatmentALW[pw.water8.daa.sel,],
+                        pw.water8.linda.out$output$treatmentHM[pw.water8.daa.sel,])
+
+pw.water12 <- subset_samples(pw, type=="water"&temp=="12 degrees")
+pw.water12.ancom.out <- ancombc(pw.water12, formula="treatment", p_adj_method = "BH")
+pw.water12.ancom.taxa <- pw.water12.ancom.out$res$q_val$taxon[pw.water12.ancom.out$res$q_val$treatmentALW<0.05]
+pw.water12.linda.out <- linda(otu_table(pw.water12), sample_data(pw.water12)%>%data.frame(), formula="~treatment",adaptive=F)
+names(pw.water12.linda.out$output$treatmentALW) <- paste(names(pw.water12.linda.out$output$treatmentALW), "ALW", sep="_")
+names(pw.water12.linda.out$output$treatmentHM) <- paste(names(pw.water12.linda.out$output$treatmentHM), "HM", sep="_")
+pw.water12.daa.sel <- row.names(pw.water12.linda.out$output$treatmentALW)%in%pw.water12.ancom.taxa &
+  pw.water12.linda.out$output$treatmentALW$padj<0.05 
+pw.water12.daa <- cbind(pw.water12.linda.out$output$treatmentALW[pw.water12.daa.sel,],
+                        pw.water12.linda.out$output$treatmentHM[pw.water12.daa.sel,])
+
+pw.polyps8.daa$type <- "polyps8"
+pw.polyps12.daa$type <- "polyps12"
+pw.water8.daa$type <- "water8"
+pw.water12.daa$type <- "water12"
+
+pw.daa.plot <- rbind(pw.polyps8.daa, pw.polyps12.daa, pw.water8.daa, pw.water12.daa)
+pw.daa.plot$type <- factor(pw.daa.plot$type, levels=c("polyps8","polyps12","water8","water12")) 
+
+pw.daa.flat<-data.frame(pathway=rep(row.names(pw.daa.plot),2), 
+                        lfc=c(pw.daa.plot$log2FoldChange_ALW, pw.daa.plot$log2FoldChange_HM),
+                    Comparison=c(rep("ALW vs. LW",nrow(pw.daa.plot)), rep("HM vs. LW",nrow(pw.daa.plot))),
+                    type=c(pw.daa.plot$type, pw.daa.plot$type))
+
+ragg::agg_tiff(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/picrust2.tiff",width=180,height=180,units="mm",
+               res=300, scaling = 0.9)
+flabs <- c("Polyps 8 °C","Polyps 12 °C","Water 8 °C","Water 12 °C")
+names(flabs) <- c("polyps8","polyps12","water8","water12")
+ggplot(pw.daa.flat, aes(y=reorder(pathway, lfc, max),x=lfc, color=Comparison))+ 
+  geom_point(alpha=0.5) + facet_wrap(~type, scales="free") + xlim(-15,12) + ylab("")+
+  scale_color_manual(name="Comparison", values=c("ALW vs. LW" = "black", "HM vs. LW" = "#FF3300"))+
+  force_panelsizes(rows=c(1,3))+
+  theme_bw()+theme(legend.position = "top", axis.text.y=element_text(size=5), 
+                   legend.justification = "right",plot.margin = unit(c(0,0,0,0),"mm"))+
+  scale_size_continuous(name="Mean abund.", breaks=c(4,100,200),labels=c(100,2500,5000))
+dev.off()
+#########################################################################################################################
+pw.polyps <- subset_samples(pw, type=="water")
+feature_counts <- otu_table(pw.polyps)
+
+res <- data.frame(tax = row.names(feature_counts), cor = NA, pvalue = NA)
+for(i in 1:nrow(feature_counts)){
+  temp <- cor.test(as.vector(feature_counts[i,]), as.numeric(sample_data(pw.polyps)$FinalPopSize), method="s")
+  res$cor[i] <- temp$estimate
+  res$pvalue[i] <- temp$p.value
+}
+res<-na.omit(res)
+res$padj <- p.adjust(res$pvalue, method="BH")
+res[res$padj<0.05,]
+
+
+```
+
