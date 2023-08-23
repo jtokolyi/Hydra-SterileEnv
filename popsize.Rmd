@@ -1,0 +1,55 @@
+---
+title: "EnvMicrobes_popsize"
+author: "Jácint Tökölyi"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Main experiment (2023 January)
+```{r echo=FALSE}
+library(readxl); library(ggplot2); library(ggpubr); library(glmmTMB); library(DHARMa); library(rstatix)
+                                           
+jan23_8deg <- read_excel("~/hidra/2023/MicrobiomeWaterFitness/data/pop_size/2023 jan experiment_8fok.xlsx")
+jan23_12deg <- read_excel("~/hidra/2023/MicrobiomeWaterFitness/data/pop_size/2023 jan experiment_12fok.xlsx")
+
+jan23_8deg$Temp<-8
+jan23_12deg$Temp<-12
+
+all_data<-rbind(jan23_8deg, jan23_12deg)
+all_data<-dplyr::filter(all_data, Group%in%c("A", "C", "D"))
+all_data$Group<-factor(all_data$Group)
+levels(all_data$Group) <- c("Lake water", "Hydra medium", "Autoclaved lake water")
+all_data$Group<-factor(all_data$Group, levels=c("Autoclaved lake water", "Hydra medium", "Lake water"))
+all_data$Days<-as.Date(all_data$Date) - as.Date("2023-01-24")
+all_data$Days<-as.factor(all_data$Days)
+
+p1<-ggplot(all_data, aes(y=Individuals, x=Days, color=Group, group=Group))+facet_wrap(~Temp,ncol=1)+
+  stat_summary(fun.data="mean_se")+stat_summary(fun = "mean", geom = "line")+theme_bw()+
+  scale_color_manual(values=c("Lake water"="#08306B","Hydra medium"="#FF3300","Autoclaved lake water"="black"))
+
+ggarrange(p1,p2,legend="top",common.legend = T)
+
+all_data$Group<-relevel(all_data$Group, "Lake water")
+m1<-glm(Individuals~Group*Temp, data=all_data[all_data$Days=="28",], family="poisson")
+m1.red<-glm(Individuals~Group+Temp, data=all_data[all_data$Days=="28",], family="poisson")
+anova(m1.red, m1, test="Chisq")
+
+cs <- emmeans(m1,specs=trt.vs.ctrl~Group|Temp, adjust="BH")
+cs2 <- data.frame(Temp=rep(c("8","12"), each=2),
+                  group1=rep(c("Autoclaved lake water", "Hydra medium"),2),
+                  group2=rep("Lake water", 4),
+                  p.signif=c("***", "*", "n.s.","n.s"),
+                  y.position=c(25,27.5,25,27.5))
+all_data$Group <- factor(all_data$Group, levels=c("Autoclaved lake water","Hydra medium", "Lake water"))
+p2<-ggplot(all_data[all_data$Days=="28",], aes(y=Individuals, x=Group, group=Group))+geom_boxplot(outlier.shape=NA)+geom_jitter(aes(color=Group),size=2.5,alpha=0.5)+
+  scale_color_manual(values=list("Lake water"="#08306B","Hydra medium"="#FF3300","Autoclaved lake water"="black"))+facet_wrap(~Temp,ncol=1)+theme_bw()+
+  ylim(-1,30)#+scale_x_discrete(position="top")
+cs2$Temp <- factor(cs2$Temp, levels=c("8","12"))
+p2 <- p2 + coord_flip()+add_pvalue(cs2, label="p.signif", coord.flip = T, tip.length=0)
+
+ggarrange(p1,p2,legend="top",common.legend = T, labels="AUTO")
+ggsave("~/hidra/2023/MicrobiomeWaterFitness/MS/figs/fig1.tiff",bg="white",dpi="print",width=180,height=120,units="mm")
+```
+

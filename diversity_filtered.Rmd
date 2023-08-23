@@ -11,7 +11,7 @@ library(dplyr); library(readr); library(DESeq2); library(ggplot2); library(qiime
 library(phyloseq); library(microbiome); library(reshape2); library(ANCOMBC); library(ggh4x)
 library(metagMisc); library(EnvStats); library(fantaxtic); library(modelsummary); 
 library(ggpubr); library(pairwiseAdonis); library(flextable); library(grid); library(LinDA);
-library(stringr); library(tidyr)
+library(stringr); library(tidyr); library(Biostrings); library(ggtree)
 ```
 
 # Import data
@@ -448,6 +448,8 @@ pnb.seq <- sequences[which(names(sequences)%in%pnb)]
 pnb.seq@ranges@NAMES <- paste("Pnb_Holi_M52_2023",1:length(pnb.seq),sep="_")
 writeXStringSet(pnb.seq, file="~/hidra/2023/MicrobiomeWaterFitness/polynucleobacter/pnb_Holi_M52.fasta")
 
+### Outside R: reconstruct phylogeny of Polynucleobacter
+
 pnb_abund <- otu_table(polyps)[sel,]%>%data.frame()
 row.names(pnb_abund) <- paste("Pnb_Holi_M52_2023",str_pad(1:nrow(pnb_abund),width=2,pad="0"),sep="_")
 pnb_tot <- apply(pnb_abund,1,sum)
@@ -461,7 +463,7 @@ x.df$Abundance <- NA
 x.df$Abundance[x.df$current.study=="yes"] <- pnb_tot[x.df$tip.label[x.df$current.study=="yes"]]
 
 p <- ggtree(x)%<+%x.df
-p1 <- p+geom_tiplab(aes(color=current.study),size=3)+xlim(0,0.275)+
+p1 <- p+geom_tiplab(aes(color=current.study),size=3, hjust=-0.05)+xlim(0,0.28)+
   scale_color_manual(name="This study:",values=c("yes"="red","no"="black"))+
   geom_tippoint(aes(size=Abundance,color=current.study))+theme(legend.position = c(0.1,0.8))
 
