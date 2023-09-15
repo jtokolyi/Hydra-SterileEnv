@@ -11,7 +11,7 @@ library(dplyr); library(readr); library(DESeq2); library(ggplot2); library(qiime
 library(phyloseq); library(microbiome); library(reshape2); library(ANCOMBC); library(ggh4x)
 library(metagMisc); library(EnvStats); library(fantaxtic); library(modelsummary); 
 library(ggpubr); library(pairwiseAdonis); library(flextable); library(grid); library(LinDA);
-library(stringr); library(tidyr); library(Biostrings); library(ggtree)
+library(stringr); library(tidyr); library(Biostrings); library(ggtree); library(patchwork)
 ```
 
 # Import data
@@ -60,7 +60,7 @@ df$group <- factor(df$group,
 ```
 
 # Alpha diversity
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE}
 group.names <- function(variable, value){
   facet1_names <- c(expression(paste("8~degree~C")), expression(paste("12~degree~C")))
   facet2_names <- c("LW", "ALW", "HM")
@@ -73,6 +73,10 @@ group.names <- function(variable, value){
   }
 }
 
+temp.labs <- c("8 °C", "12 °C"); names(temp.labs) <- c("8 degrees", "12 degrees")
+temp.labs <- c("Field samples", "8 °C", "12 °C"); names(temp.labs) <- c("Field sample","8 degrees", "12 degrees")
+
+######### Fig. 1. suppl. polyps
 top.polyps <- fantaxtic::top_taxa(polyps, tax_level = "Genus", n_taxa = 15,grouping = "group", include_na_taxa = T)
 plot_nested_bar(top.polyps$ps_obj, top_level = "Order", nested_level = "Genus")+
   facet_wrap(~temp+treatment,scale="free_x",nrow=2)+
@@ -80,6 +84,41 @@ plot_nested_bar(top.polyps$ps_obj, top_level = "Order", nested_level = "Genus")+
   guides(fill=guide_legend(ncol=1))
 ggsave(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/toptaxa_polyps.tiff",width=180,height=180,units="mm",dpi="print")
 
+######### Fig. 1. main polyps
+top.polyps <- fantaxtic::top_taxa(subset_samples(full_data, type=="polyp"), 
+                                  tax_level = "Order", n_taxa = 5,grouping = "group", include_na_taxa = T)
+sel_other <- tax_table(top.polyps$ps_obj)%>%data.frame()%>%pull(Phylum)=="Other"
+abund_other <- otu_table(top.polyps$ps_obj)%>%data.frame()%>%as.matrix()%>%prop.table(margin=2)%>%subset(sel_other)
+sample_data(top.polyps$ps_obj)$AbundOther <- as.vector(t(abund_other))
+
+psdf <- psmelt(top.polyps$ps_obj)
+polyps_cols <- taxon_colours(top.polyps$ps_obj,tax_level="Order", 
+                            palette=unname(palette.colors(palette = "Paired",n=5)))
+
+psdf$Order <- relevel(as.factor(psdf$Order),"Other")
+
+pp0.leg <- ggplot(psdf[psdf$temp=="Field sample",], aes(y=Abundance,x=reorder(Sample, AbundOther, decreasing=F),fill=Order)) + 
+  geom_col(position=position_fill(),width=0) +
+  scale_fill_manual(name="Order:", values=polyps_cols)+
+  theme(axis.text.x=element_blank(),legend.position="none")+
+  theme_void()+theme(legend.position=c(0.675,0.5))
+
+pp0.field <- ggplot(psdf[psdf$temp=="Field sample",], aes(y=Abundance,x=reorder(Sample, AbundOther, decreasing=F),fill=Order)) + 
+  geom_col(position=position_fill()) +
+  scale_fill_manual(values=polyps_cols) +
+  facet_wrap(~temp,scales="free_x",labeller=labeller(temp=temp.labs),ncol=3) +
+  theme_bw() + theme(axis.text.x=element_blank(),axis.title.x=element_blank(),legend.position="none")
+
+pp0 <- ggplot(psdf[psdf$temp!="Field sample",], aes(y=Abundance,x=reorder(Sample, AbundOther, decreasing=F),fill=Order))+
+  geom_col(position=position_fill())+
+  scale_fill_manual(values=polyps_cols)+
+  facet_wrap(~temp*treatment,scales="free_x",labeller=labeller(temp=temp.labs),ncol=3)+
+  theme_bw() + theme(axis.text.x=element_blank(), legend.position="none")+
+  xlab("Sample")+ylab("")
+
+grid.polyps <- ggarrange(ggarrange(pp0.field, pp0.leg, ncol=1), pp0, ncol=2, widths=c(1.1,3))
+
+######### Fig. 1. suppl. water
 top.water <- fantaxtic::top_taxa(water, tax_level = "Genus", n_taxa = 15,grouping = "group", include_na_taxa = T)
 plot_nested_bar(top.water$ps_obj, top_level = "Order", nested_level = "Genus")+
   facet_wrap(~temp+treatment,scale="free_x",nrow=2)+
@@ -87,23 +126,63 @@ plot_nested_bar(top.water$ps_obj, top_level = "Order", nested_level = "Genus")+
   guides(fill=guide_legend(ncol=1))
 ggsave(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/toptaxa_water.tiff",width=180,height=180,units="mm",dpi="print")
 
-ggplot(df, aes(y=chao1,x=treatment,fill=treatment))+geom_boxplot()+facet_wrap(~type+temp,scale="free_x")+
+######### Fig. 1. main water
+top.water <- fantaxtic::top_taxa(subset_samples(full_data, type=="water"), 
+                                 tax_level = "Order", n_taxa = 5,grouping = "group", include_na_taxa = T)
+sel_other <- tax_table(top.water$ps_obj)%>%data.frame()%>%pull(Phylum)=="Other"
+abund_other <- otu_table(top.water$ps_obj)%>%data.frame()%>%as.matrix()%>%prop.table(margin=2)%>%subset(sel_other)
+sample_data(top.water$ps_obj)$AbundOther <- as.vector(t(abund_other))
+
+psdf <- psmelt(top.water$ps_obj)
+water_cols <- taxon_colours(top.water$ps_obj,tax_level="Order", 
+                            palette=unname(palette.colors(palette = "Paired",n=5)))
+
+water_cols[names(water_cols)%in%names(polyps_cols)] <- polyps_cols[names(polyps_cols)%in%names(water_cols)]
+water_cols[!names(water_cols)%in%names(polyps_cols)] <- tail(palette.colors(palette = "Paired",n=6),1)
+
+psdf$Order <- relevel(as.factor(psdf$Order),"Other")
+pw0.leg <- ggplot(psdf[psdf$temp=="Field sample",], aes(y=Abundance,x=reorder(Sample, AbundOther, decreasing=F),fill=Order)) + 
+  geom_col(position=position_fill(),width=0) +
+  scale_fill_manual(name="Order:", values=water_cols)+
+  theme(axis.text.x=element_blank(),legend.position="none")+
+  theme_void()+theme(legend.position=c(0.675,0.5))
+
+pw0.field <- ggplot(psdf[psdf$temp=="Field sample",], aes(y=Abundance,x=reorder(Sample, AbundOther, decreasing=F),fill=Order)) + 
+  geom_col(position=position_fill()) +
+  scale_fill_manual(values=water_cols) +
+  facet_wrap(~temp,scales="free_x",labeller=labeller(temp=temp.labs),ncol=3) +
+  theme_bw() + theme(axis.text.x=element_blank(),axis.title.x=element_blank(),legend.position="none")
+
+pw0 <- ggplot(psdf[psdf$temp!="Field sample",], aes(y=Abundance,x=reorder(Sample, AbundOther, decreasing=F),fill=Order))+
+  geom_col(position=position_fill())+
+  scale_fill_manual(values=water_cols)+
+  facet_wrap(~temp*treatment,scales="free_x",labeller=labeller(temp=temp.labs),ncol=3)+
+  theme_bw() + theme(axis.text.x=element_blank(), legend.position="none")+
+  xlab("Sample")+ylab("")
+
+grid.water <- ggarrange(ggarrange(pw0.field, pw0.leg, ncol=1), pw0, ncol=2, widths=c(1.1,3))
+
+#########################################################################################################################
+temp.labs <- c("Field samples", "8 °C", "12 °C"); names(temp.labs) <- c("Field sample","8 degrees", "12 degrees")
+
+df$treatment<-as.character(df$treatment)
+df$treatment[is.na(df$treatment)]<-"Field sample"
+grid.chao <- ggplot(df, aes(y=chao1,x=treatment,fill=treatment))+geom_boxplot()+
+  facet_wrap(~type+temp,scale="free_x",labeller=labeller(temp=temp.labs))+
   theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))+ 
-  ylab("Chao1 diversity")+stat_n_text()+theme_bw()+scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))
-
-ggplot(df, aes(y=shannon,x=treatment,fill=treatment))+geom_boxplot()+facet_wrap(~type+temp,scale="free_x")+
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))+
-  ylab("Shannon diversity")+stat_n_text()+theme_bw()+scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))
-
-ggplot(df, aes(y=evenness,x=treatment,fill=treatment))+geom_boxplot()+facet_wrap(~type+temp,scale="free_x")+
-  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))+
-  ylab("Pielou evenness")+stat_n_text()+theme_bw()+scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))
+  ylab("Chao1 diversity")+stat_n_text(vjust=0.3)+theme_bw()+
+  scale_fill_manual(name="", values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
+  theme(legend.position = "top")+xlab("Treatment")+
+  scale_x_discrete(labels=c("Field sample"="","ALW"="ALW","LW"="LW","HM"="HM"))
 
 datasummary(group~chao1*(mean+sd)+shannon*(mean+sd)+evenness*(mean+sd), droplevels(subset(df, type=="polyp",drop=T)),
             output="~/hidra/2023/MicrobiomeWaterFitness/MS/table1_polyps.docx")
 datasummary(group~chao1*(mean+sd)+shannon*(mean+sd)+evenness*(mean+sd), droplevels(subset(df, type=="water",drop=T)),
             output="~/hidra/2023/MicrobiomeWaterFitness/MS/table1_water.docx")
 
+ragg::agg_tiff(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/fig2.tiff",width=120,height=240,units="mm",res=300, scaling = 0.65)
+ggarrange(grid.polyps, grid.water, grid.chao, ncol=1, labels="AUTO")
+dev.off()
 ```
 
 # Beta diversity
@@ -115,6 +194,7 @@ beta.braycurtis <- plot_ordination(full_data, nmds.obj, type="samples",color="tr
   geom_polygon(aes(fill=treatment),alpha=0.5)+theme_bw()+
   scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
   scale_color_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
+  scale_shape_manual(labels=c("Field sample"="Field samples", "8 degrees"="8 °C", "12 degrees" = "12 °C"), values=c("Field sample" = 1, "8 degrees" = 2, "12 degrees" = 3))+
   ggtitle("Bray-Curtis")+theme(legend.title = element_blank())
 
 nmds.obj <- ordinate(full_data, method="NMDS", distance="jaccard",binary=T)
@@ -123,6 +203,7 @@ beta.jaccard <- plot_ordination(full_data, nmds.obj, type="samples",color="treat
   geom_polygon(aes(fill=treatment),alpha=0.5)+theme_bw()+
   scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
   scale_color_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
+  scale_shape_manual(labels=c("Field sample"="Field samples", "8 degrees"="8 °C", "12 degrees" = "12 °C"), values=c("Field sample" = 1, "8 degrees" = 2, "12 degrees" = 3))+
   ggtitle("Jaccard presence-absence")+theme(legend.title = element_blank())
 
 weighted.unifrac <- UniFrac(full_data, weighted=T)
@@ -132,6 +213,7 @@ beta.wUniFrac <- plot_ordination(full_data, nmds.obj, type="samples",color="trea
   geom_polygon(aes(fill=treatment),alpha=0.5)+theme_bw()+
   scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
   scale_color_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
+  scale_shape_manual(labels=c("Field sample"="Field samples", "8 degrees"="8 °C", "12 degrees" = "12 °C"), values=c("Field sample" = 1, "8 degrees" = 2, "12 degrees" = 3))+
   ggtitle("Weighted UniFrac")+theme(legend.title = element_blank())
 
 unweighted.unifrac <- UniFrac(full_data, weighted=F)
@@ -141,6 +223,7 @@ beta.uwUniFrac <- plot_ordination(full_data, nmds.obj, type="samples",color="tre
   geom_polygon(aes(fill=treatment),alpha=0.5)+theme_bw()+
   scale_fill_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
   scale_color_manual(values=c("LW"="#08306B","HM"="#FF3300","ALW"="black"))+
+  scale_shape_manual(labels=c("Field sample"="Field samples", "8 degrees"="8 °C", "12 degrees" = "12 °C"), values=c("Field sample" = 1, "8 degrees" = 2, "12 degrees" = 3))+
   ggtitle("Unweighted UniFrac")+theme(legend.title = element_blank())
 
 ggarrange(beta.braycurtis, beta.jaccard, beta.wUniFrac, beta.uwUniFrac, nrow=2,ncol=2,common.legend=T,labels="AUTO")
@@ -366,13 +449,13 @@ ragg::agg_tiff(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/daa.tiff",w
                res=300, scaling = 0.9)
 flabs <- c("Polyps 8 °C","Polyps 12 °C","Water 8 °C","Water 12 °C")
 names(flabs) <- c("polyps8","polyps12","water8","water12")
-ggplot(daa.flat, aes(y=reorder(taxon, lfc, mean),x=lfc, color=Comparison, size=meanAbund/25))+ 
+ggplot(daa.flat, aes(y=reorder(taxon, lfc, mean),x=lfc, color=Comparison, size=meanAbund))+ 
   geom_point(alpha=0.5) + facet_wrap(~type, scales="free_y",
   labeller=labeller(type=flabs)) + xlim(-13.5,11) + ylab("")+force_panelsizes(rows=c(1,4))+
   scale_color_manual(name="Comparison", values=c("ALW vs. LW" = "black", "HM vs. LW" = "#FF3300"))+
   theme_bw()+theme(legend.position = "top", axis.text.y=element_text(size=7), 
                    legend.justification = "right",plot.margin = unit(c(0,0,0,0),"mm"))+
-  scale_size_continuous(name="Mean abund.", breaks=c(4,100,200),labels=c(100,2500,5000))
+  scale_size_continuous(name="Mean abund.", trans="sqrt", breaks=c(10,100,1000),labels=c(10,100,1000))
 dev.off()
 ```
 
@@ -405,7 +488,7 @@ fc.sel.df <- data.frame(genus = rep(row.names(fc.sel), each=ncol(fc.sel)),
 fc.sel.df$genus <- sapply(strsplit(fc.sel.df$genus,split=";"),"[",6)
 
 cor.polyps <- ggplot(fc.sel.df, aes(x=popsize, y=logCount,color=temp,shape=Treatment))+geom_point()+facet_wrap(~genus)+
-  scale_color_manual(name="Temperature",values=c("8 degrees"="blue", "12 degrees"="red"))+theme_bw()+
+  scale_color_manual(name="Temperature",values=c("8 degrees"="blue", "12 degrees"="red"), labels=c("8 degrees" = "8 °C", "12 degrees" = "12 °C"))+theme_bw()+
   xlab("Hydra population size")+ylab("log ASV abundance + 1")+ggtitle("Polyps")
 
 genus_data <- tax_glom(water, "Genus", NArm=F)
@@ -456,30 +539,48 @@ pnb_tot <- apply(pnb_abund,1,sum)
 
 x<-ape::read.tree("~/hidra/2023/MicrobiomeWaterFitness/polynucleobacter/pnb_all/tree2.nwk")
 x$tip.label <- gsub("\'","",x$tip.label)
+x$tip.label <- gsub("Unidentified|Uncultured","Uncult.",x$tip.label)
+x$tip.label <- gsub("proteobacterium","proteobact.",x$tip.label)
+x$tip.label <- gsub("Euplotes","E.",x$tip.label)
 x<-ape::root(x, "AF312022 Ralstonia basilensis strain DSM 11853")
 x.df <- data.frame(tip.label=gsub("\'","",x$tip.label))
 x.df$current.study <- ifelse(grepl("Holi_M52",x.df$tip.label), "yes","no")
 x.df$Abundance <- NA
 x.df$Abundance[x.df$current.study=="yes"] <- pnb_tot[x.df$tip.label[x.df$current.study=="yes"]]
 
-p <- ggtree(x)%<+%x.df
-p1 <- p+geom_tiplab(aes(color=current.study),size=3, hjust=-0.05)+xlim(0,0.28)+
-  scale_color_manual(name="This study:",values=c("yes"="red","no"="black"))+
-  geom_tippoint(aes(size=Abundance,color=current.study))+theme(legend.position = c(0.1,0.8))
-
 pnb_wide <- cbind(sample_data(polyps),t(pnb_abund))
 pnb_long <- pivot_longer(pnb_wide, cols=starts_with("Pnb_Holi_M52"))
 
+cors <- lapply(unique(pnb_long$name), function(i) cor.test(pnb_long$FinalPopSize[pnb_long$name==i], pnb_long$value[pnb_long$name==i], method="s"))
+cors <- sapply(cors, "[[", "estimate")
+names(cors) <- unique(pnb_long$name)
+
+x.df$cor.coef <- cors[x.df$tip.label]
+x.df$cor.coef[is.na(x.df$cor.coef)] <- 0
+
+p <- ggtree(x)%<+%x.df
+p1 <- p+geom_tiplab(aes(color=current.study),size=3, hjust=-0.05)+xlim(0,0.28)+
+  scale_color_manual(name="This study:",values=c("yes"="forestgreen","no"="black"))+
+  geom_tippoint(aes(size=Abundance,color=current.study))+theme(legend.position = c(0.1,0.8))
+
+g <- ggplot(x.df, aes(tip.label, cor.coef))+geom_col(fill="forestgreen")+coord_flip()+
+  labs(x="Correlation")+
+  theme_bw()+theme(axis.text.y=element_blank(),axis.title.y = element_blank(),
+                   axis.text.x = element_text(angle=90))
+
 p2 <- ggplot(pnb_long, aes(x=FinalPopSize, y=log(value+1),color=temp, shape=treatment))+geom_point()+
   facet_wrap(~name,ncol=3)+
-  scale_color_manual(name="Temperature:",values=c("8 degrees"="blue", "12 degrees"="red"))+theme_bw()+
+  scale_color_manual(name="Temperature:",values=c("8 degrees"="blue", "12 degrees"="red"),
+                     labels=c("8 degrees" = "8 °C", "12 degrees" = "12 °C"))+theme_bw()+
   labs(shape="Treatment:")+
   xlab("Hydra population size")+ylab("log (ASV abundance + 1)")+
   theme(strip.text.x = element_text(size = 6))
 
-ragg::agg_tiff(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/pnb.tiff",width=180,height=180,units="mm",
+ragg::agg_tiff(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/pnb.tiff",width=210,height=180,units="mm",
                res=300, scaling = 0.7)
-ggarrange(p1,p2,ncol=2,labels="AUTO",widths=c(2,1.9))
+ggarrange(print(g %>% insert_left(p1,width=5)) &
+            theme(legend.position="right"),
+  p2,ncol=2,labels="AUTO",widths=c(2,1.9))
 dev.off()
 ```
 
@@ -558,12 +659,15 @@ pw.daa.flat<-data.frame(pathway=rep(row.names(pw.daa.plot),2),
                     Comparison=c(rep("ALW vs. LW",nrow(pw.daa.plot)), rep("HM vs. LW",nrow(pw.daa.plot))),
                     type=c(pw.daa.plot$type, pw.daa.plot$type))
 
-ragg::agg_tiff(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/picrust2.tiff",width=180,height=180,units="mm",
+ragg::agg_tiff(filename="~/hidra/2023/MicrobiomeWaterFitness/MS/figs/picrust2.tiff",
+               width=180,height=180,units="mm",
                res=300, scaling = 0.9)
 flabs <- c("Polyps 8 °C","Polyps 12 °C","Water 8 °C","Water 12 °C")
 names(flabs) <- c("polyps8","polyps12","water8","water12")
 ggplot(pw.daa.flat, aes(y=reorder(pathway, lfc, max),x=lfc, color=Comparison))+ 
-  geom_point(alpha=0.5) + facet_wrap(~type, scales="free") + xlim(-15,12) + ylab("")+
+  geom_point(shape=1) + 
+  facet_wrap(~type, scales="free",labeller=labeller(type=flabs)) + 
+  xlim(-15,12) + ylab("")+
   scale_color_manual(name="Comparison", values=c("ALW vs. LW" = "black", "HM vs. LW" = "#FF3300"))+
   force_panelsizes(rows=c(1,3))+
   theme_bw()+theme(legend.position = "top", axis.text.y=element_text(size=5), 
